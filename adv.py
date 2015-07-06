@@ -6,7 +6,7 @@ Parses suplied output of the command
 to the exabgp neighbor as a valid bgp update
 
 TODO: 
-    - add atomic, aggregator, med, local preference attributes
+    - add lables and mpbgp
 """
 import re
 from sys import stdout
@@ -50,7 +50,7 @@ def get_as_path_origin_atomic(aspath):
     if asp[-1] not in ['I', '?']:
         atomic = True
     if atomic:
-        aggregator = " ".join(asp[-2:])
+        aggregator = ":".join(asp[-2:])
         asp = [item for item in asp[2:-3] if item != '']
         origin = 'incomplete' if asp[-2] == '?' else 'igp'
         as_path = asp[:-2]
@@ -78,6 +78,7 @@ class XMLNamespaces:
 
     def __call__(self, path):
         return path.format_map(self._namespaces)
+
 def parse_and_remove(file, path):
     '''
     allows incremental processing of XML documents
@@ -106,45 +107,34 @@ def main():
     '''
     main
     '''
-    #input_xml = etree.parse('/home/den/full_table_xml')
-    input_xml = parse_and_remove('/home/den/full_table_xml',
+    input_xml = parse_and_remove('/home/den/small_table_xml',
                                  'route-information/route-table/rt')
-    #root = input_xml.getroot()
     prep = 'http://xml.juniper.net/junos/12.3R3/junos-routing'
     ns = XMLNamespaces(prep=prep)
     tree = RBTree()
-    #for i in root.findall(ns('{prep}route-information/ \
-    #                         {prep}route-table/        \
-    #                         {prep}rt')):
+
     for i in input_xml:
         prefix = i.find(ns('{prep}rt-destination')).text
         mask = i.find(ns('{prep}rt-prefix-length')).text
         key = (ip_to_int(prefix), mask)
-        next_hop = i.find(ns('{prep}rt-entry/{prep}nh/{prep}to')).text
-        next_hop = 'self'
+        kwargs = {}
+        kwargs['nh'] = i.find(ns('{prep}rt-entry/{prep}nh/{prep}to')).text
+        kwargs['nh'] = 'self'
         asp = i.find(ns('{prep}rt-entry/{prep}as-path')).text.rstrip()
         asp = get_as_path_origin_atomic(asp)
-        community = []
+        community = ''
         for comm in i.findall(ns('{prep}rt-entry/{prep}communities/{prep}community')):
-            community.append(comm.text)
-        atomic_bool = False
+            community += comm.text + ' '
+        kwargs['community'] = community
         if len(asp) == 2:
-            as_path = asp[0]
-            origin = asp[1]
+            kwargs['as_path'] = asp[0]
+            kwargs['origin'] = asp[1]
         else:
-            atomic_bool = True
-            as_path = asp[0]
-            origin = asp[1]
-            atomic = asp[2]
-            aggregator = asp[3]
-        if atomic_bool:
-            update = Update(prefix, mask, nh=next_hop, as_path=as_path,
-                            origin=origin,
-                            community=' '.join(community))
-        else:
-            update = Update(prefix, mask, nh=next_hop, as_path=as_path,
-                            origin=origin,
-                            community=' '.join(community))
+            kwargs['as_path'] = asp[0]
+            kwargs['origin'] = asp[1]
+            kwargs['aggregator'] = asp[3]
+
+        update = Update(prefix, mask, **kwargs)
         tree.insert(key, update)
     send_update(tree)
 
