@@ -9,6 +9,7 @@ TODO:
     - add lables and mpbgp
 """
 import re
+import ipaddress
 from sys import stdout
 from time import sleep
 from lxml import etree
@@ -26,7 +27,11 @@ def send_update(tree):
     for _, value in tree.iter_items():
         stdout.write('announce ' + str(value) + '\n')
         stdout.flush()
-
+    #I tried to send vpnv4 update, it doesn't work
+    #also exabgp has starnge behaviour when it converts extended-comminity from
+    #from string to a send value, so it's better to use hex from as below
+    #stdout.write('announce route 60.60.60.60/16 rd 1.1.1.1:5000 next-hop 172.30.152.20 extended-community 0x0002010101011388 label 19\n')
+    #stdout.flush()
     ##Loop endlessly to allow ExaBGP to continue running
     while True:
         sleep(1)
@@ -35,11 +40,12 @@ def ip_to_int(prefix):
     '''
     converts ip address/prefix into integer
     '''
-    prefix = prefix.split('.')
-    return int(prefix[0])*(256**3)   \
-           + int(prefix[1])*(256**2) \
-           + int(prefix[2])*(256)    \
-           + int(prefix[3])          \
+    #prefix = prefix.split('.')
+    #return int(prefix[0])*(256**3)   \
+    #       + int(prefix[1])*(256**2) \
+    #       + int(prefix[2])*(256)    \
+    #       + int(prefix[3])          \
+    return int(ipaddress.ip_address(prefix))
 
 def get_as_path_origin_atomic(aspath):
     '''
@@ -103,23 +109,16 @@ def parse_and_remove(file, path):
             except IndexError:
                 pass
 
-def main():
-    '''
-    main
-    '''
-    input_xml = parse_and_remove('/home/den/small_table_xml',
-                                 'route-information/route-table/rt')
-    prep = 'http://xml.juniper.net/junos/12.3R3/junos-routing'
-    ns = XMLNamespaces(prep=prep)
-    tree = RBTree()
-
-    for i in input_xml:
+def create_tree(file, tree, prep, ns):
+    for i in file:
         prefix = i.find(ns('{prep}rt-destination')).text
         mask = i.find(ns('{prep}rt-prefix-length')).text
         key = (ip_to_int(prefix), mask)
         kwargs = {}
         kwargs['nh'] = i.find(ns('{prep}rt-entry/{prep}nh/{prep}to')).text
         kwargs['nh'] = 'self'
+        if key[0] > 4294967295:
+            kwargs['nh'] = '::ffff:172.30.152.20'
         asp = i.find(ns('{prep}rt-entry/{prep}as-path')).text.rstrip()
         asp = get_as_path_origin_atomic(asp)
         community = ''
@@ -133,10 +132,42 @@ def main():
             kwargs['as_path'] = asp[0]
             kwargs['origin'] = asp[1]
             kwargs['aggregator'] = asp[3]
+        med = i.find(ns('{prep}rt-entry/{prep}med'))
+        lp =  i.find(ns('{prep}rt-entry/{prep}local-preference'))
+        if med is not None:
+            kwargs['med'] = med.text
+        if lp is not None:
+            kwargs['lp'] = lp.text
 
         update = Update(prefix, mask, **kwargs)
         tree.insert(key, update)
+
+def main():
+    '''
+    main
+    '''
+    files = []
+    try:
+        input_xml = parse_and_remove('/home/den/small_table_xml',
+                                     'route-information/route-table/rt')
+        files.append(input_xml)
+    except FileNotFoundError:
+        pass
+    try:
+        ipv6_input_xml = parse_and_remove('/home/den/ipv6_xml',
+                                          'route-information/route-table/rt')
+        files.append(ipv6_input_xml)
+    except FileNotFoundError:
+        pass
+
+    tree = RBTree()
+    prep = 'http://xml.juniper.net/junos/12.3R3/junos-routing'
+    ns = XMLNamespaces(prep=prep)
+
+    for file in files:
+        create_tree(file, tree, prep, ns)
     send_update(tree)
+
 
 if __name__ == '__main__':
     main()

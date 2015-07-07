@@ -76,7 +76,6 @@ class Update(Structure):
         return s
 
     def __str__(self):
-        print(self._as_path)
         s = 'route ' + self._prefix + '/' + self._mask \
             + ' next-hop ' + self._nh                  \
             + ' origin ' + self._origin                \
