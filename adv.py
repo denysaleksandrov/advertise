@@ -68,7 +68,7 @@ def get_as_path_origin_atomic(aspath):
 
 class XMLNamespaces:
     '''
-    fucking junos uses xml namespace, so find, findall, iter, etc have to
+    junos uses xml namespace, so find, findall, iter, etc have to
     wrap namespaces into utility class
     '''
     def __init__(self, **kwargs):
