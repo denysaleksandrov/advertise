@@ -22,16 +22,20 @@ def send_update(tree):
     sends updates into stdout so exabgp can intercept/parse and send them to BGP
     neighbor
     '''
-    sleep(5)
+    #sleep(5)
     ##Iterate through messages
-    for _, value in tree.iter_items():
-        stdout.write('announce ' + str(value) + '\n')
-        stdout.flush()
+    #for _, value in tree.iter_items():
+    #    stdout.write('announce ' + str(value) + '\n')
+    #    stdout.flush()
     #I tried to send vpnv4 update, it doesn't work
     #also exabgp has starnge behaviour when it converts extended-comminity from
     #from string to a send value, so it's better to use hex from as below
-    #stdout.write('announce route 60.60.60.60/16 rd 1.1.1.1:5000 next-hop 172.30.152.20 extended-community 0x0002010101011388 label 19\n')
-    #stdout.flush()
+    stdout.write('announce route 1.4.0.0/16 rd 65000:1 next-hop self community 100:1 extended-community 0x0002FDE900000001 label 1000\n')
+    stdout.flush()
+    stdout.write('announce route 60.60.60.60/16 rd 1.1.1.1:5000 next-hop '
+                 + '172.30.152.20 extended-community 0x0102010101011388 '
+                 + 'label 301301\n')
+    stdout.flush()
     ##Loop endlessly to allow ExaBGP to continue running
     while True:
         sleep(1)
